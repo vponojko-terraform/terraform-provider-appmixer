@@ -1,0 +1,7 @@
+**.idea
+**.terraform
+**.tfstate**
+**.terraformrc
+/terraform-provider-appmixer
+/examples/local_dev/PERSONAL.md
+/examples/local_dev/
