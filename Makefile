@@ -1,4 +1,4 @@
-NAMESPACE=vponoikoait
+NAMESPACE=vponojko-terraform
 NAME=appmixer
 BINARY=terraform-provider-${NAME}
 VERSION=0.1.0

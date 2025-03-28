@@ -1,4 +1,4 @@
-module github.com/vponoikoait/terraform-provider-appmixer
+module github.com/vponojko-terraform/terraform-provider-appmixer
 
 go 1.23.7
 

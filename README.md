@@ -21,7 +21,7 @@ make install
 terraform {
   required_providers {
     appmixer = {
-      source  = "vponoikoait/appmixer"
+      source  = "vponojko-terraform/appmixer"
       version = "0.1.0"
     }
   }
@@ -93,15 +93,15 @@ cat > main.tf << 'EOF'
 terraform {
   required_providers {
     appmixer = {
-      source  = "vponoikoait/appmixer"
+      source  = "vponojko-terraform/appmixer"
       version = "0.1.0"
     }
   }
 }
 
 provider "appmixer" {
-  api_url  = "https://api"
-  email    = "your-email@vponoikoait.com"
+  api_url  = "https://api.your-tenant.appmixer.cloud"
+  email    = "your-email@vponojko-terraform.com"
   password = "your-password"
 }
 
@@ -122,7 +122,7 @@ EOF
 cat > ~/.terraformrc << 'EOF'
 provider_installation {
   dev_overrides {
-    "vponoikoait/appmixer" = "${pwd}/appmixer-terraform-provider"
+    "vponojko-terraform/appmixer" = "${pwd}/appmixer-terraform-provider"
   }
   direct {}
 }

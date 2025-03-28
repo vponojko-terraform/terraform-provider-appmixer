@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     appmixer = {
-      source  = "vponoikoait/appmixer"
+      source  = "vponojko-terraform/appmixer"
       version = "0.1.0"
     }
   }
