@@ -294,53 +294,28 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 	client := m.(*Client)
 
 	userID := d.Id()
-	forcePasswordUpdate := d.Get("password_force_update").(bool)
-	shouldUpdatePassword := false // Initialize flag
-	var newPasswordValue string   // Variable to hold the new password from config
-
 	tflog.Info(ctx, "Updating Appmixer user", map[string]interface{}{
-		"user_id":                    userID,
-		"is_self":                    userID == client.UserID,
-		"scope_changed":              d.HasChange("scope"),
-		"vendor_changed":             d.HasChange("vendor"),
-		"password_changed_in_config": d.HasChange("password"),
-		"password_force_update":      forcePasswordUpdate,
+		"user_id":          userID,
+		"is_self":          userID == client.UserID,
+		"scope_changed":    d.HasChange("scope"),
+		"vendor_changed":   d.HasChange("vendor"),
+		"password_changed": d.HasChange("password"),
 	})
 
-	// Determine if password update should be triggered
-	if d.HasChange("password") {
-		oldPassword, newPassword := d.GetChange("password")
-		newPasswordValue = newPassword.(string) // Store the target new password value
-		oldPasswordStr, okOld := oldPassword.(string)
-
-		if forcePasswordUpdate {
-			shouldUpdatePassword = true
-			tflog.Debug(ctx, "Password update triggered by password_force_update flag.")
-		} else if okOld && oldPasswordStr != "" {
-			// Only trigger if password existed in state before and config changed
-			shouldUpdatePassword = true
-			tflog.Debug(ctx, "Password update triggered by change from existing state value.")
-		} else {
-			tflog.Debug(ctx, "Password change detected in config, but no existing password in state and force flag is false. Skipping API call.")
-		}
-	}
-
-	// Prevent modifying your own permissions (scope/vendor)
+	// Prevent modifying your own permissions
 	if userID == client.UserID && (d.HasChange("scope") || d.HasChange("vendor")) {
 		return diag.Errorf("Modifying your own permissions is not allowed for security reasons")
 	}
 
 	// When modifying other users, check if current user has admin permissions
-	// This check needs to cover scope, vendor, AND intended password changes for other users
-	if userID != client.UserID && (d.HasChange("scope") || d.HasChange("vendor") || shouldUpdatePassword) {
+	if userID != client.UserID {
 		if !hasAdminPermissions(client) {
-			return diag.Errorf("Modifying other users (scope, vendor, or password) requires admin permissions")
+			return diag.Errorf("Modifying other users requires admin permissions")
 		}
 	}
 
-	// Handle Scope and Vendor Updates
+	// Create update request with changed fields
 	updateReq := updateUserRequest{}
-	needsScopeVendorUpdate := false
 
 	if d.HasChange("scope") {
 		scopes := d.Get("scope").([]interface{})
@@ -349,7 +324,6 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 			scope[i] = v.(string)
 		}
 		updateReq.Scope = scope
-		needsScopeVendorUpdate = true
 	}
 
 	if d.HasChange("vendor") {
@@ -359,62 +333,41 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 			vendor[i] = v.(string)
 		}
 		updateReq.Vendor = vendor
-		needsScopeVendorUpdate = true
 	}
 
-	// Only make Scope/Vendor update request if there are fields to update
-	if needsScopeVendorUpdate {
-		// Make the API request to update the user scope/vendor
+	// Only make update request if there are fields to update
+	if len(updateReq.Scope) > 0 || len(updateReq.Vendor) > 0 {
+		// Make the API request to update the user
 		_, err := client.DoRequest(ctx, "PUT", fmt.Sprintf("/users/%s", userID), updateReq)
 		if err != nil {
 			return diag.FromErr(err)
 		}
 	}
 
-	// Update password if the conditions determined earlier are met
-	if shouldUpdatePassword {
-		// Block updating own password
+	// Update password if it has changed
+	if d.HasChange("password") {
+		// If updating own password, use /user/change-password
 		if userID == client.UserID {
+			// We can't use change-password because we don't know the old password
+			// Warn about this limitation
 			return diag.Errorf("Cannot update your own password through Terraform. Use the Appmixer UI or API directly")
 		} else {
 			// Use admin reset-password for other users
-
-			// Re-check length constraint on the new password value
-			if len(newPasswordValue) < 5 {
-				return diag.Errorf("Password must be at least 5 characters long according to Appmixer requirements")
-			}
-
 			passwordChangeReq := struct {
 				Email    string `json:"email"`
 				Password string `json:"password"`
 			}{
-				Email:    d.Get("email").(string), // Need the user's email for reset API
-				Password: newPasswordValue,        // Use the stored new password value from config change
+				Email:    d.Get("email").(string),
+				Password: d.Get("password").(string),
 			}
 
-			tflog.Debug(ctx, "Attempting to reset password for user via admin API", map[string]interface{}{"user_email": passwordChangeReq.Email})
 			_, err := client.DoRequest(ctx, "POST", "/user/reset-password", passwordChangeReq)
 			if err != nil {
 				return diag.FromErr(err)
 			}
-			tflog.Info(ctx, "Password successfully reset for user via admin API", map[string]interface{}{"user_email": passwordChangeReq.Email})
-
-			// Store the newly set password in the state after successful reset
-			if err := d.Set("password", newPasswordValue); err != nil { // Use the stored new password value
-				return diag.FromErr(err)
-			}
-
-			// Reset the force flag in the state if it was used
-			if forcePasswordUpdate {
-				if err := d.Set("password_force_update", false); err != nil {
-					// Log warning, don't fail the apply for this
-					tflog.Warn(ctx, "Failed to reset password_force_update flag in state after successful forced update.")
-				}
-			}
 		}
 	}
 
-	// Read final state after all potential updates
 	return resourceUserRead(ctx, d, m)
 }
 

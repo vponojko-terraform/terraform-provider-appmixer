@@ -115,28 +115,9 @@ output "total_users" {
 }
 ```
 
-### Forcing a Password Reset (Admin Required)
-
-To force a password reset for an existing user (requires admin privileges), set the `password_force_update` flag to `true` along with the desired new password. The provider will call the password reset API on the next `apply`.
-
-```hcl
-resource "appmixer_user" "user_to_reset" {
-  # Assuming this user already exists and is managed by Terraform
-  username = "user-to-reset@example.com"
-  email    = "user-to-reset@example.com"
-  
-  # Set the new password and the force flag
-  password              = "new-forced-password-123"
-  password_force_update = true 
-}
-```
-
--> **Note:** The `password_force_update` flag will automatically be reset to `false` in the state after the successful update, preventing accidental resets on subsequent applies.
-
 ## Security Considerations
 
 1. Always use environment variables or a secure secret management solution for storing credentials
 2. Ensure that admin credentials are properly secured
-3. Remember that certain operations require admin permissions (listing users, counting users, setting scopes/vendors, resetting other users' passwords, deleting users)
-4. Consider using dedicated service accounts with appropriate permissions for Terraform operations
-5. Be aware that updating the password for the currently authenticated user via Terraform is not supported. 
+3. Remember that certain operations require admin permissions
+4. Consider using dedicated service accounts with appropriate permissions for Terraform operations 
