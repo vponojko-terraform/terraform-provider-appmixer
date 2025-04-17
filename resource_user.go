@@ -83,12 +83,6 @@ func resourceUser() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"password_force_update": {
-				Type:        schema.TypeBool,
-				Optional:    true,
-				Default:     false,
-				Description: "Set to true to force a password reset API call on the next apply, even if the password value in the state appears unchanged. Resets to false in the state after a successful forced update.",
-			},
 		},
 	}
 }
@@ -294,35 +288,24 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 	client := m.(*Client)
 
 	userID := d.Id()
-	forcePasswordUpdate := d.Get("password_force_update").(bool)
-	shouldUpdatePassword := false // Initialize flag
-	var newPasswordValue string   // Variable to hold the new password from config
 
 	tflog.Info(ctx, "Updating Appmixer user", map[string]interface{}{
-		"user_id":                    userID,
-		"is_self":                    userID == client.UserID,
-		"scope_changed":              d.HasChange("scope"),
-		"vendor_changed":             d.HasChange("vendor"),
+		"user_id":                userID,
+		"is_self":                userID == client.UserID,
+		"scope_changed":          d.HasChange("scope"),
+		"vendor_changed":         d.HasChange("vendor"),
 		"password_changed_in_config": d.HasChange("password"),
-		"password_force_update":      forcePasswordUpdate,
 	})
 
-	// Determine if password update should be triggered
-	if d.HasChange("password") {
-		oldPassword, newPassword := d.GetChange("password")
-		newPasswordValue = newPassword.(string) // Store the target new password value
-		oldPasswordStr, okOld := oldPassword.(string)
-
-		if forcePasswordUpdate {
-			shouldUpdatePassword = true
-			tflog.Debug(ctx, "Password update triggered by password_force_update flag.")
-		} else if okOld && oldPasswordStr != "" {
-			// Only trigger if password existed in state before and config changed
-			shouldUpdatePassword = true
-			tflog.Debug(ctx, "Password update triggered by change from existing state value.")
-		} else {
-			tflog.Debug(ctx, "Password change detected in config, but no existing password in state and force flag is false. Skipping API call.")
-		}
+	// Determine if password update should be triggered based ONLY on HasChange
+	shouldUpdatePassword := d.HasChange("password")
+	var newPasswordValue string // Still needed if shouldUpdatePassword is true
+	if shouldUpdatePassword {
+		_, newPassword := d.GetChange("password")
+		newPasswordValue = newPassword.(string)
+		tflog.Debug(ctx, "Password update triggered by d.HasChange("password") returning true.")
+	} else {
+		tflog.Debug(ctx, "d.HasChange("password") returned false. No password update triggered.")
 	}
 
 	// Prevent modifying your own permissions (scope/vendor)
@@ -371,25 +354,25 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 		}
 	}
 
-	// Update password if the conditions determined earlier are met
+	// Update password if HasChange was true
 	if shouldUpdatePassword {
 		// Block updating own password
 		if userID == client.UserID {
 			return diag.Errorf("Cannot update your own password through Terraform. Use the Appmixer UI or API directly")
 		} else {
 			// Use admin reset-password for other users
-
+			
 			// Re-check length constraint on the new password value
 			if len(newPasswordValue) < 5 {
 				return diag.Errorf("Password must be at least 5 characters long according to Appmixer requirements")
 			}
-
+			
 			passwordChangeReq := struct {
 				Email    string `json:"email"`
 				Password string `json:"password"`
 			}{
 				Email:    d.Get("email").(string), // Need the user's email for reset API
-				Password: newPasswordValue,        // Use the stored new password value from config change
+				Password: newPasswordValue,      // Use the stored new password value from config change
 			}
 
 			tflog.Debug(ctx, "Attempting to reset password for user via admin API", map[string]interface{}{"user_email": passwordChangeReq.Email})
@@ -398,18 +381,10 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 				return diag.FromErr(err)
 			}
 			tflog.Info(ctx, "Password successfully reset for user via admin API", map[string]interface{}{"user_email": passwordChangeReq.Email})
-
+			
 			// Store the newly set password in the state after successful reset
 			if err := d.Set("password", newPasswordValue); err != nil { // Use the stored new password value
 				return diag.FromErr(err)
-			}
-
-			// Reset the force flag in the state if it was used
-			if forcePasswordUpdate {
-				if err := d.Set("password_force_update", false); err != nil {
-					// Log warning, don't fail the apply for this
-					tflog.Warn(ctx, "Failed to reset password_force_update flag in state after successful forced update.")
-				}
 			}
 		}
 	}

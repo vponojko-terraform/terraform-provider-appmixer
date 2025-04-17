@@ -21,7 +21,6 @@ resource "appmixer_user" "example" {
 * `username` - (Required, ForceNew) The username for the new user. This cannot be changed after creation.
 * `email` - (Required) The email address for the user.
 * `password` - (Required, Sensitive) The password for the user. See the **Password Update Logic** section below for details on when changes trigger an update.
-* `password_force_update` - (Optional, Boolean) Defaults to `false`. Set to `true` to explicitly trigger a password reset API call on the next `terraform apply` for this user (requires admin permissions for other users). This flag will be automatically reset to `false` in the Terraform state after a successful forced update.
 * `scope` - (Optional, Computed) List of scope permissions for the user. Requires admin permissions to set. Common values include `["user"]` and `["user", "admin"]`.
 * `vendor` - (Optional, Computed) List of vendor associations for the user. Requires admin permissions to set.
 
@@ -29,10 +28,10 @@ resource "appmixer_user" "example" {
 
 ## Password Update Logic
 
-A password reset API call for a user **other than the currently authenticated user** is triggered only under the following conditions:
+A password reset API call for a user **other than the currently authenticated user** is triggered only if:
 
-1.  The `password_force_update` attribute is set to `true` in the configuration.
-2.  **OR** the `password` attribute in the configuration is changed **AND** a password value was previously stored in the Terraform state for this resource (i.e., it wasn't the initial creation or the state value wasn't empty).
+1.  The `lifecycle { ignore_changes = [password] }` block is **NOT** present in the resource configuration.
+2.  **AND** Terraform detects a difference between the `password` value in the configuration and the value stored in the Terraform state.
 
 **Important Considerations:**
 
