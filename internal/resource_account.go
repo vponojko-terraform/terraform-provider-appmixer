@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -158,66 +157,20 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 	}
 
 	d.SetId(createRes.AccountID)
-	tflog.Info(ctx, "Successfully initiated account creation", map[string]interface{}{
+	tflog.Info(ctx, "Successfully received account ID from creation POST", map[string]interface{}{
 		"account_id": createRes.AccountID,
 		"service":    service,
 	})
 
-	/*
-		// Optional: Set display name if provided during creation (API doesn't support this directly on POST)
-		// The PUT request in Update will handle setting/changing the display name later if needed.
-		if displayName, ok := d.GetOk("display_name"); ok {
-			updateReq := updateAccountRequest{DisplayName: displayName.(string)}
-			_, err := client.DoRequest(ctx, "PUT", fmt.Sprintf("/accounts/%s", createRes.AccountID), updateReq)
-			if err != nil {
-				// Log warning, but don't fail the creation
-				tflog.Warn(ctx, "Failed to set display_name immediately after creation", map[string]interface{}{"account_id": createRes.AccountID, "error": err.Error()})
-			}
-		}
-	*/
-
-	// Read the newly created resource to populate computed fields
-	// Add retries to handle potential eventual consistency
-	var readDiags diag.Diagnostics
-	maxRetries := 5
-	retryDelay := 3 * time.Second
-
-	for i := 0; i < maxRetries; i++ {
-		readDiags = resourceAccountRead(ctx, d, m)
-		if !readDiags.HasError() {
-			// Success
-			return readDiags
-		}
-
-		// Check if the error is specifically a 404 potentially caused by eventual consistency
-		isNotFound := false
-		for _, diagErr := range readDiags {
-			// Match the specific error message returned by resourceAccountRead on 404
-			if strings.Contains(diagErr.Summary, fmt.Sprintf("failed to read account %s: API returned status 404", createRes.AccountID)) {
-				isNotFound = true
-				break
-			}
-		}
-
-		if isNotFound && i < maxRetries-1 {
-			tflog.Warn(ctx, "Read after create failed (404), retrying after delay...", map[string]interface{}{
-				"account_id": createRes.AccountID,
-				"attempt":    i + 1,
-				"delay":      retryDelay,
-			})
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		// If it's not a 404 or it's the last attempt, return the error
-		break
+	// Set configured values in state immediately (except sensitive token)
+	d.Set("service", service)
+	if displayName, ok := d.GetOk("display_name"); ok {
+		d.Set("display_name", displayName.(string))
 	}
 
-	// If loop finished without success, return the last diagnostics
-	tflog.Error(ctx, "Failed to read account after creation, even after retries.", map[string]interface{}{
-		"account_id": createRes.AccountID,
-	})
-	return readDiags
+	// NOTE: We are *not* calling resourceAccountRead here.
+	// Computed values (name, profile_info, etc.) will be populated on the next read.
+	return nil // Return nil diagnostics for successful creation based on POST response
 }
 
 func resourceAccountRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
