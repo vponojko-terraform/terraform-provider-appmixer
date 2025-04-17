@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -169,7 +170,47 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 	}
 
 	// Read the newly created resource to populate computed fields
-	return resourceAccountRead(ctx, d, m)
+	// Add retries to handle potential eventual consistency
+	var readDiags diag.Diagnostics
+	maxRetries := 3
+	retryDelay := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		readDiags = resourceAccountRead(ctx, d, m)
+		if !readDiags.HasError() {
+			// Success
+			return readDiags
+		}
+
+		// Check if the error is specifically a 404 potentially caused by eventual consistency
+		isNotFound := false
+		for _, diagErr := range readDiags {
+			// Match the specific error message returned by resourceAccountRead on 404
+			if strings.Contains(diagErr.Summary, fmt.Sprintf("failed to read account %s: API returned status 404", createRes.AccountID)) {
+				isNotFound = true
+				break
+			}
+		}
+
+		if isNotFound && i < maxRetries-1 {
+			tflog.Warn(ctx, "Read after create failed (404), retrying after delay...", map[string]interface{}{
+				"account_id": createRes.AccountID,
+				"attempt":    i + 1,
+				"delay":      retryDelay,
+			})
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// If it's not a 404 or it's the last attempt, return the error
+		break
+	}
+
+	// If loop finished without success, return the last diagnostics
+	tflog.Error(ctx, "Failed to read account after creation, even after retries.", map[string]interface{}{
+		"account_id": createRes.AccountID,
+	})
+	return readDiags
 }
 
 func resourceAccountRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -185,9 +226,13 @@ func resourceAccountRead(ctx context.Context, d *schema.ResourceData, m interfac
 	if err != nil {
 		// Handle 404 Not Found
 		if strings.Contains(err.Error(), "status 404") {
-			tflog.Warn(ctx, "Account not found, removing from state", map[string]interface{}{"account_id": accountID})
-			d.SetId("") // Mark resource for removal
-			return diags
+			// Return a specific error for 404, allowing the caller (Create function) to handle retries.
+			// For normal reads (plan/refresh), Terraform core will handle removing the resource if it gets this error.
+			// No need to d.SetId("") here anymore.
+			return diag.FromErr(fmt.Errorf("failed to read account %s: API returned status 404", accountID))
+			// tflog.Warn(ctx, "Account not found, removing from state", map[string]interface{}{"account_id": accountID})
+			// d.SetId("") // Mark resource for removal - Let Terraform core handle this based on the error.
+			// return diags
 		}
 		return diag.FromErr(fmt.Errorf("failed to read account %s: %w", accountID, err))
 	}
