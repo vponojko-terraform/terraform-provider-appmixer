@@ -179,6 +179,11 @@ func resourceUserCreate(ctx context.Context, d *schema.ResourceData, m interface
 
 	d.SetId(userID)
 
+	// Store the configured password in the state upon creation
+	if err := d.Set("password", password); err != nil {
+		return diag.FromErr(err)
+	}
+
 	// Handle scope and vendor settings if provided
 	if d.Get("scope") != nil || d.Get("vendor") != nil {
 		updateReq := updateUserRequest{}
@@ -352,6 +357,10 @@ func resourceUserUpdate(ctx context.Context, d *schema.ResourceData, m interface
 
 			_, err := client.DoRequest(ctx, "POST", "/user/reset-password", passwordChangeReq)
 			if err != nil {
+				return diag.FromErr(err)
+			}
+			// Store the newly set password in the state after successful reset
+			if err := d.Set("password", passwordChangeReq.Password); err != nil {
 				return diag.FromErr(err)
 			}
 		}

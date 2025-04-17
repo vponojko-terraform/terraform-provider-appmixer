@@ -46,3 +46,4 @@ User resources can be imported by their ID:
 ```shell
 terraform import appmixer_user.example <user_id>
 ``` 
+User id can be found inside of MongoDB - db.getCollection('users').find({})
