@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bytes"
@@ -40,12 +40,15 @@ func Provider() *schema.Provider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"appmixer_user": resourceUser(),
+			"appmixer_user":    resourceUser(),
+			"appmixer_account": resourceAccount(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"appmixer_user":        dataSourceUser(),
 			"appmixer_users":       dataSourceUsers(),
 			"appmixer_users_count": dataSourceUsersCount(),
+			"appmixer_account":     dataSourceAccount(),
+			"appmixer_accounts":    dataSourceAccounts(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}

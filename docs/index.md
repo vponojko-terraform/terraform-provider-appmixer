@@ -15,9 +15,9 @@ terraform {
 }
 
 provider "appmixer" {
-  api_url  = "https://api.your-tenant.appmixer.cloud"
-  email    = "admin@example.com"
-  password = "your-secure-password"
+  api_url  = "YOUR_APPMIXER_API_URL" # Or set APPMIXER_API_URL env var
+  email    = "YOUR_EMAIL"            # Or set APPMIXER_EMAIL env var
+  password = "YOUR_PASSWORD"         # Or set APPMIXER_PASSWORD env var
 }
 ```
 
@@ -53,3 +53,35 @@ export APPMIXER_PASSWORD="your-secure-password"
   * Modifying user permissions
   * Creating users with specific permissions or vendor settings
 * Users cannot modify their own permissions or update their own passwords through this provider 
+
+<!-- Start SDK Example Usage -->
+
+```hcl
+provider "appmixer" {
+  api_url  = "YOUR_APPMIXER_API_URL" # Or set APPMIXER_API_URL env var
+  email    = "YOUR_EMAIL"            # Or set APPMIXER_EMAIL env var
+  password = "YOUR_PASSWORD"         # Or set APPMIXER_PASSWORD env var
+}
+```
+
+<!-- End SDK Example Usage -->
+
+<!-- Start SDK Available Resources -->
+## Available Resources
+
+* [`appmixer_user`](./resources/user.md)
+* [`appmixer_account`](./resources/account.md)
+<!-- End SDK Available Resources -->
+
+<!-- Start SDK Available Data Sources -->
+## Available Data Sources
+
+* [`appmixer_user`](./data-sources/user.md)
+* [`appmixer_users`](./data-sources/users.md)
+* [`appmixer_users_count`](./data-sources/users_count.md)
+* [`appmixer_account`](./data-sources/account.md)
+* [`appmixer_accounts`](./data-sources/accounts.md)
+<!-- End SDK Available Data Sources -->
+
+<!-- Start SDK Schema -->
+## Schema 
