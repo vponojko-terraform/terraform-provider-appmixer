@@ -26,8 +26,9 @@ type accountResponse struct {
 
 // Represents the structure for creating an account via POST /accounts
 type createAccountRequest struct {
-	Service string            `json:"service"`
-	Token   map[string]string `json:"token"` // API expects string values in the token map
+	Service     string            `json:"service"`
+	Token       map[string]string `json:"token"`                 // API expects string values in the token map
+	DisplayName *string           `json:"displayName,omitempty"` // Add optional display name
 }
 
 // Represents the response from POST /accounts
@@ -130,6 +131,10 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 		Service: service,
 		Token:   tokenMap,
 	}
+	if displayName, ok := d.GetOk("display_name"); ok {
+		displayNameStr := displayName.(string)
+		createReq.DisplayName = &displayNameStr
+	}
 
 	respBytes, err := client.DoRequest(ctx, "POST", "/accounts", createReq)
 	if err != nil {
@@ -158,22 +163,24 @@ func resourceAccountCreate(ctx context.Context, d *schema.ResourceData, m interf
 		"service":    service,
 	})
 
-	// Optional: Set display name if provided during creation (API doesn't support this directly on POST)
-	// The PUT request in Update will handle setting/changing the display name later if needed.
-	if displayName, ok := d.GetOk("display_name"); ok {
-		updateReq := updateAccountRequest{DisplayName: displayName.(string)}
-		_, err := client.DoRequest(ctx, "PUT", fmt.Sprintf("/accounts/%s", createRes.AccountID), updateReq)
-		if err != nil {
-			// Log warning, but don't fail the creation
-			tflog.Warn(ctx, "Failed to set display_name immediately after creation", map[string]interface{}{"account_id": createRes.AccountID, "error": err.Error()})
+	/*
+		// Optional: Set display name if provided during creation (API doesn't support this directly on POST)
+		// The PUT request in Update will handle setting/changing the display name later if needed.
+		if displayName, ok := d.GetOk("display_name"); ok {
+			updateReq := updateAccountRequest{DisplayName: displayName.(string)}
+			_, err := client.DoRequest(ctx, "PUT", fmt.Sprintf("/accounts/%s", createRes.AccountID), updateReq)
+			if err != nil {
+				// Log warning, but don't fail the creation
+				tflog.Warn(ctx, "Failed to set display_name immediately after creation", map[string]interface{}{"account_id": createRes.AccountID, "error": err.Error()})
+			}
 		}
-	}
+	*/
 
 	// Read the newly created resource to populate computed fields
 	// Add retries to handle potential eventual consistency
 	var readDiags diag.Diagnostics
-	maxRetries := 3
-	retryDelay := 2 * time.Second
+	maxRetries := 5
+	retryDelay := 3 * time.Second
 
 	for i := 0; i < maxRetries; i++ {
 		readDiags = resourceAccountRead(ctx, d, m)
