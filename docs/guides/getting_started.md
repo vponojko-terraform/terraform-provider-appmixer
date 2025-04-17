@@ -119,5 +119,6 @@ output "total_users" {
 
 1. Always use environment variables or a secure secret management solution for storing credentials
 2. Ensure that admin credentials are properly secured
-3. Remember that certain operations require admin permissions
-4. Consider using dedicated service accounts with appropriate permissions for Terraform operations 
+3. Remember that certain operations require admin permissions (listing users, counting users, setting scopes/vendors, resetting other users' passwords, deleting users)
+4. Consider using dedicated service accounts with appropriate permissions for Terraform operations
+5. Be aware that updating the password for the currently authenticated user via Terraform is not supported. 
