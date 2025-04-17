@@ -44,11 +44,13 @@ func Provider() *schema.Provider {
 			"appmixer_account": resourceAccount(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"appmixer_user":        dataSourceUser(),
-			"appmixer_users":       dataSourceUsers(),
-			"appmixer_users_count": dataSourceUsersCount(),
-			"appmixer_account":     dataSourceAccount(),
-			"appmixer_accounts":    dataSourceAccounts(),
+			"appmixer_user":           dataSourceUser(),
+			"appmixer_users":          dataSourceUsers(),
+			"appmixer_users_count":    dataSourceUsersCount(),
+			"appmixer_account":        dataSourceAccount(),
+			"appmixer_accounts":       dataSourceAccounts(),
+			"appmixer_apps":           dataSourceApps(),
+			"appmixer_app_components": dataSourceAppComponents(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}

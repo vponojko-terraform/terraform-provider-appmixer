@@ -178,61 +178,86 @@ func resourceAccountRead(ctx context.Context, d *schema.ResourceData, m interfac
 	accountID := d.Id()
 	var diags diag.Diagnostics
 
-	tflog.Debug(ctx, "Reading Appmixer account", map[string]interface{}{
-		"account_id": accountID,
+	tflog.Debug(ctx, "Reading Appmixer account by listing all accounts", map[string]interface{}{
+		"target_account_id": accountID,
 	})
 
-	respBytes, err := client.DoRequest(ctx, "GET", fmt.Sprintf("/accounts/%s", accountID), nil)
+	// Fetch all accounts instead of using GET /accounts/:accountId
+	respBytes, err := client.DoRequest(ctx, "GET", "/accounts", nil)
 	if err != nil {
-		// Handle 404 Not Found
-		if strings.Contains(err.Error(), "status 404") {
-			// Return a specific error for 404, allowing the caller (Create function) to handle retries.
-			// For normal reads (plan/refresh), Terraform core will handle removing the resource if it gets this error.
-			// No need to d.SetId("") here anymore.
-			return diag.FromErr(fmt.Errorf("failed to read account %s: API returned status 404", accountID))
-			// tflog.Warn(ctx, "Account not found, removing from state", map[string]interface{}{"account_id": accountID})
-			// d.SetId("") // Mark resource for removal - Let Terraform core handle this based on the error.
-			// return diags
+		// If listing itself fails, return that error
+		return diag.FromErr(fmt.Errorf("failed to list accounts while trying to read account %s: %w", accountID, err))
+	}
+
+	var accountsList []accountResponse // Expecting a list from GET /accounts
+	if err := json.Unmarshal(respBytes, &accountsList); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to parse accounts list response while trying to read account %s: %w", accountID, err))
+	}
+
+	var foundAccount *accountResponse
+	for _, acc := range accountsList {
+		if acc.AccountID == accountID {
+			// Use a pointer to avoid copying potentially large structs
+			found := acc // Create a local copy for the pointer
+			foundAccount = &found
+			break
 		}
-		return diag.FromErr(fmt.Errorf("failed to read account %s: %w", accountID, err))
 	}
 
-	var acc accountResponse
-	if err := json.Unmarshal(respBytes, &acc); err != nil {
-		return diag.FromErr(fmt.Errorf("failed to parse account response for %s: %w", accountID, err))
+	// If the account wasn't found in the list, treat it as deleted
+	if foundAccount == nil {
+		tflog.Warn(ctx, "Account not found in the list, removing from state", map[string]interface{}{"account_id": accountID})
+		d.SetId("")
+		return diags
 	}
 
-	// Set computed fields
-	d.Set("name", acc.Name)
+	// Account found, populate the state from the found account data
+	acc := *foundAccount
+
+	// Align state setting logic with dataSourceAccountsRead
+	if err := d.Set("service", acc.Service); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set service: %w", err))
+	}
+	if err := d.Set("name", acc.Name); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set name: %w", err))
+	}
+	if err := d.Set("user_id", acc.UserID); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set user_id: %w", err))
+	}
+	if err := d.Set("icon", acc.Icon); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set icon: %w", err))
+	}
+	if err := d.Set("label", acc.Label); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set label: %w", err))
+	}
+
 	if acc.DisplayName != nil {
-		d.Set("display_name", *acc.DisplayName)
+		if err := d.Set("display_name", *acc.DisplayName); err != nil {
+			return diag.FromErr(fmt.Errorf("failed to set display_name: %w", err))
+		}
 	} else {
-		if _, ok := d.GetOk("display_name"); !ok {
-			d.Set("display_name", "")
+		// If API returns null, set state to empty string, consistent with data source
+		if err := d.Set("display_name", ""); err != nil {
+			return diag.FromErr(fmt.Errorf("failed to set empty display_name: %w", err))
 		}
 	}
-	d.Set("service", acc.Service)
-	d.Set("user_id", acc.UserID)
 
-	// Convert profileInfo map[string]interface{} to map[string]string for Terraform state
 	profileInfoMap := make(map[string]string)
 	if acc.ProfileInfo != nil {
 		for k, v := range acc.ProfileInfo {
 			if s, ok := v.(string); ok {
 				profileInfoMap[k] = s
 			} else {
-				// Handle cases where profile info might not be a simple string
 				tflog.Warn(ctx, "Non-string value found in profile_info", map[string]interface{}{"key": k, "value": v})
 				profileInfoMap[k] = fmt.Sprintf("%v", v)
 			}
 		}
 	}
-	d.Set("profile_info", profileInfoMap)
+	if err := d.Set("profile_info", profileInfoMap); err != nil {
+		return diag.FromErr(fmt.Errorf("failed to set profile_info: %w", err))
+	}
 
-	d.Set("icon", acc.Icon)
-	d.Set("label", acc.Label)
-
-	// Note: We don't set 'token' here as it's sensitive and write-only (ForceNew)
+	// Note: We don't set 'token' as it's sensitive and write-only
 
 	return diags
 }
