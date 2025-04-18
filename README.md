@@ -2,7 +2,10 @@
 
 ⚠️ AI generated, partially verified
 
-Tested against self-hosted 
+Based on 
+[Appmixer API documentation](https://docs.appmixer.com/)
+version 6.0.  
+Tested against [self-hosted version of an Appmixer](https://docs.appmixer.com/appmixer-self-managed/appmixer-deployment-models)
 
 ## Requirements
 - Terraform >= 0.13.x
@@ -133,5 +136,3 @@ terraform init
 terraform apply
 terraform output current_user
 ```
-
-[API Documentation](https://docs.appmixer.com/api/user) 

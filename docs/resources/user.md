@@ -2,6 +2,8 @@
 
 The `appmixer_user` resource allows you to create and manage users in Appmixer.
 
+[user API documentation](https://docs.appmixer.com/api/user)
+
 ## Example Usage
 
 ```hcl
